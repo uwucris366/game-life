@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Juego 3D Base - Con Cielo</title>
+    <title>Juego 3D Base - Con Cielo y Calle</title>
     <style>
         html, body {
             margin: 0;
@@ -82,16 +82,15 @@
         function init() {
             scene = new THREE.Scene();
 
-            // --- CAMBIO AQUÍ: CARGAR IMAGEN DE CIELO ---
-            // Usamos TextureLoader para cargar tu 'cielo.png' local
+            // Instancia para cargar texturas
             const cargadorTexturas = new THREE.TextureLoader();
-            cargadorTexturas.load('cielo.png', function(textura) {
-                // Mapeo equirectangular para que la imagen envuelva la escena como una esfera
-                textura.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = textura;
+
+            // 1. CARGAR IMAGEN DE CIELO
+            cargadorTexturas.load('cielo.png', function(texturaCielo) {
+                texturaCielo.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = texturaCielo;
             });
             
-            // Eliminamos la niebla densa previa para que se pueda apreciar bien el cielo
             scene.fog = new THREE.FogExp2(0xffffff, 0.005); 
 
             // Cámara
@@ -137,9 +136,26 @@
             document.addEventListener('keydown', onKeyDown);
             document.addEventListener('keyup', onKeyUp);
 
-            // Suelo
+            // --- CAMBIO AQUÍ: SUELO CON TEXTURA 'calle.png' ---
             const sueloGeo = new THREE.PlaneGeometry(200, 200);
-            const sueloMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.8 });
+            
+            // Creamos el material básico para el suelo
+            const sueloMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+
+            // Cargamos la imagen de la calle
+            cargadorTexturas.load('calle.png', function(texturaSuelo) {
+                // Hacemos que la textura se repita (efecto mosaico)
+                texturaSuelo.wrapS = THREE.RepeatWrapping;
+                texturaSuelo.wrapT = THREE.RepeatWrapping;
+                
+                // Cuántas veces se repite la imagen en el plano de 200x200 (ajusta estos números si queda muy grande o pequeña)
+                texturaSuelo.repeat.set(20, 20); 
+                
+                // Asignamos la textura al material
+                sueloMat.map = texturaSuelo;
+                sueloMat.needsUpdate = true; // Avisamos a Three.js que redibuje el material
+            });
+
             const suelo = new THREE.Mesh(sueloGeo, sueloMat);
             suelo.rotation.x = -Math.PI / 2;
             scene.add(suelo);
