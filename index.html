@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Juego 3D Base - Primera Persona</title>
+    <title>Juego 3D Base - Con Cielo</title>
     <style>
         html, body {
             margin: 0;
@@ -13,7 +13,6 @@
             height: 100%;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        /* Pantalla de inicio / Bloqueo de ratón */
         #bloqueo {
             position: absolute;
             width: 100%;
@@ -31,7 +30,6 @@
         #instrucciones {
             font-size: 24px;
         }
-        /* Punto de mira (Crosshair) opcional */
         #mira {
             position: absolute;
             top: 50%;
@@ -71,56 +69,53 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-        // Variables principales
         let camera, scene, renderer, controls;
         let moverAdelante = false, moverAtras = false, moverIzquierda = false, moverDerecha = false;
         
-        // Vectores para físicas simples de movimiento
         const velocidad = new THREE.Vector3();
         const direccion = new THREE.Vector3();
-        
         let reloj = new THREE.Clock();
 
         init();
         animate();
 
         function init() {
-            // 1. Escena y Niebla (para dar profundidad)
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xefd1b5);
-            scene.fog = new THREE.FogExp2(0xefd1b5, 0.025);
 
-            // 2. Cámara (Campo de visión, Proporción, Cercano, Lejano)
+            // --- CAMBIO AQUÍ: CARGAR IMAGEN DE CIELO ---
+            // Usamos TextureLoader para cargar tu 'cielo.png' local
+            const cargadorTexturas = new THREE.TextureLoader();
+            cargadorTexturas.load('cielo.png', function(textura) {
+                // Mapeo equirectangular para que la imagen envuelva la escena como una esfera
+                textura.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = textura;
+            });
+            
+            // Eliminamos la niebla densa previa para que se pueda apreciar bien el cielo
+            scene.fog = new THREE.FogExp2(0xffffff, 0.005); 
+
+            // Cámara
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.y = 1.6; // Altura promedio de los ojos del jugador
+            camera.position.y = 1.6; 
 
-            // 3. Luces
-            const luzAmbiental = new THREE.AmbientLight(0xffffff, 1.5);
+            // Luces
+            const luzAmbiental = new THREE.AmbientLight(0xffffff, 1.2);
             scene.add(luzAmbiental);
 
             const luzDirecional = new THREE.DirectionalLight(0xffffff, 1.0);
             luzDirecional.position.set(20, 40, 20);
             scene.add(luzDirecional);
 
-            // 4. Controles de Primera Persona
+            // Controles
             controls = new PointerLockControls(camera, document.body);
 
             const bloqueo = document.getElementById('bloqueo');
-            bloqueo.addEventListener('click', () => {
-                controls.lock();
-            });
-
-            controls.addEventListener('lock', () => {
-                bloqueo.style.display = 'none';
-            });
-
-            controls.addEventListener('unlock', () => {
-                bloqueo.style.display = 'flex';
-            });
-
+            bloqueo.addEventListener('click', () => { controls.lock(); });
+            controls.addEventListener('lock', () => { bloqueo.style.display = 'none'; });
+            controls.addEventListener('unlock', () => { bloqueo.style.display = 'flex'; });
             scene.add(controls.getObject());
 
-            // 5. Escuchar Teclado
+            // Teclado
             const onKeyDown = (event) => {
                 switch (event.code) {
                     case 'KeyW': moverAdelante = true; break;
@@ -142,15 +137,14 @@
             document.addEventListener('keydown', onKeyDown);
             document.addEventListener('keyup', onKeyUp);
 
-            // 6. El Entorno (Suelo y Obstáculos)
-            // Suelo con textura de rejilla básica
+            // Suelo
             const sueloGeo = new THREE.PlaneGeometry(200, 200);
-            const sueloMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
+            const sueloMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.8 });
             const suelo = new THREE.Mesh(sueloGeo, sueloMat);
-            suelo.rotation.x = -Math.PI / 2; // Acostar el plano
+            suelo.rotation.x = -Math.PI / 2;
             scene.add(suelo);
 
-            // Crear algunos cubos aleatorios para tener puntos de referencia
+            // Obstáculos (Cubos)
             const cuboGeo = new THREE.BoxGeometry(2, 4, 2);
             for (let i = 0; i < 50; i++) {
                 const cuboMat = new THREE.MeshStandardMaterial({ 
@@ -158,22 +152,18 @@
                     roughness: 0.5 
                 });
                 const cubo = new THREE.Mesh(cuboGeo, cuboMat);
-                
-                // Posiciones aleatorias en el mapa
                 cubo.position.x = (Math.random() - 0.5) * 100;
                 cubo.position.z = (Math.random() - 0.5) * 100;
-                cubo.position.y = 2; // Mitad de la altura para que pise el suelo
-                
+                cubo.position.y = 2;
                 scene.add(cubo);
             }
 
-            // 7. Renderizador
+            // Renderizador
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            // Ajustar pantalla si cambia el tamaño de la ventana
             window.addEventListener('resize', onWindowResize);
         }
 
@@ -183,27 +173,23 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // 8. Bucle de Animación (Game Loop)
+        // Bucle de Animación
         function animate() {
             requestAnimationFrame(animate);
 
             if (controls.isLocked === true) {
-                const delta = reloj.getDelta(); // Tiempo transcurrido entre frames
+                const delta = reloj.getDelta();
 
-                // Amortiguación/Fricción para que el movimiento sea fluido
                 velocidad.x -= velocidad.x * 10.0 * delta;
                 velocidad.z -= velocidad.z * 10.0 * delta;
 
-                // Definir dirección según las teclas pulsadas
                 direccion.z = Number(moverAdelante) - Number(moverAtras);
                 direccion.x = Number(moverDerecha) - Number(moverIzquierda);
-                direccion.normalize(); // Evita que se mueva más rápido en diagonal
+                direccion.normalize();
 
-                // Velocidad de movimiento (ajusta el 400.0 para ir más rápido o lento)
                 if (moverAdelante || moverAtras) velocidad.z -= direccion.z * 400.0 * delta;
                 if (moverIzquierda || moverDerecha) velocidad.x -= direccion.x * 400.0 * delta;
 
-                // Aplicar movimiento relativo a la cámara
                 controls.moveRight(-velocidad.x * delta);
                 controls.moveForward(-velocidad.z * delta);
             }
