@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prototipo Juego 3D - Primera Persona</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+        #blocker {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-align: center;
+            cursor: pointer;
+            z-index: 10;
+        }
+        #instructions {
+            font-size: 24px;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.7);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 5;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="blocker">
+        <div id="instructions">
+            <p style="font-size: 36px;">Haz clic para Jugar</p>
+            <p>Moverse: WASD o Flechas<br>Correr: SHIFT<br>Saltar: ESPACIO<br>Mirar: Ratón</p>
+        </div>
+    </div>
+    
+    <div id="crosshair"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+
+    <script>
+        let scene, camera, renderer, controls;
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let canJump = false, isSprinting = false;
+        
+        // Variables de física básicas
+        let prevTime = performance.now();
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        let playerHeight = 2.0; // Altura de los ojos del personaje
+        let playerY = playerHeight; 
+
+        // Variables para el movimiento realista de cámara (Head Bobbing)
+        let bobTimer = 0;
+        let currentBobSpeed = 0;
+        let currentBobAmount = 0;
+
+        init();
+        animate();
+
+        function init() {
+            // 1. Escena y Cámara
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xefd1b5); // Color del cielo
+            scene.fog = new THREE.FogExp2(0xefd1b5, 0.015);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            // 2. Iluminación
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(20, 40, 20);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            scene.add(dirLight);
+
+            // 3. Controles de Primera Persona (PointerLock)
+            controls = new THREE.PointerLockControls(camera, document.body);
+
+            const blocker = document.getElementById('blocker');
+            const instructions = document.getElementById('instructions');
+
+            blocker.addEventListener('click', () => {
+                controls.lock();
+            });
+
+            controls.addEventListener('lock', () => {
+                instructions.style.display = 'none';
+                blocker.style.display = 'none';
+            });
+
+            controls.addEventListener('unlock', () => {
+                blocker.style.display = 'flex';
+                instructions.style.display = '';
+            });
+
+            scene.add(controls.getObject());
+
+            // Posición inicial del jugador
+            controls.getObject().position.y = playerHeight;
+
+            // 4. Oyentes de Teclado
+            const onKeyDown = (event) => {
+                switch (event.code) {
+                    case 'KeyW': case 'ArrowUp': moveForward = true; break;
+                    case 'KeyS': case 'ArrowDown': moveBackward = true; break;
+                    case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
+                    case 'KeyD': case 'ArrowRight': moveRight = true; break;
+                    case 'Space': if (canJump === true) velocity.y += 12; canJump = false; break;
+                    case 'ShiftLeft': case 'ShiftRight': isSprinting = true; break;
+                }
+            };
+
+            const onKeyUp = (event) => {
+                switch (event.code) {
+                    case 'KeyW': case 'ArrowUp': moveForward = false; break;
+                    case 'KeyS': case 'ArrowDown': moveBackward = false; break;
+                    case 'KeyA': case 'ArrowLeft': moveLeft = false; break;
+                    case 'KeyD': case 'ArrowRight': moveRight = false; break;
+                    case 'ShiftLeft': case 'ShiftRight': isSprinting = false; break;
+                }
+            };
+
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+
+            // 5. Entorno (Suelo y Objetos de referencia)
+            // Suelo (un tablero de ajedrez simple)
+            const floorGeo = new THREE.PlaneGeometry(200, 200, 50, 50);
+            floorGeo.rotateX(-Math.PI / 2);
+            
+            // Colores alternos para el suelo para notar el movimiento
+            const position = floorGeo.attributes.position;
+            const colors = [];
+            for (let i = 0; i < position.count; i++) {
+                if ((Math.floor(position.getX(i)/10) + Math.floor(position.getZ(i)/10)) % 2 === 0) {
+                    colors.push(0.4, 0.7, 0.4); // Verde oscuro
+                } else {
+                    colors.push(0.5, 0.8, 0.5); // Verde claro
+                }
+            }
+            floorGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            
+            const floorMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // Añadir algunos cubos flotantes y estructuras para dar sensación de espacio
+            const boxGeo = new THREE.BoxGeometry(4, 4, 4);
+            for (let i = 0; i < 40; i++) {
+                const boxMat = new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff, roughness: 0.5 });
+                const box = new THREE.Mesh(boxGeo, boxMat);
+                box.position.x = Math.floor(Math.random() * 20 - 10) * 8;
+                box.position.y = Math.floor(Math.random() * 4) * 4 + 2;
+                box.position.z = Math.floor(Math.random() * 20 - 10) * 8;
+                box.castShadow = true;
+                box.receiveShadow = true;
+                scene.add(box);
+            }
+
+            // 6. Renderizador
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Ajuste de pantalla
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // 7. Bucle de Animación (Físicas y Renderizado)
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (controls.isLocked === true) {
+                const time = performance.now();
+                const delta = (time - prevTime) / 1000; // Tiempo transcurrido en segundos
+
+                // Amortiguación/Fricción de velocidad (para frenar suavemente)
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+                velocity.y -= 9.8 * 3.5 * delta; // Gravedad (G = 9.8 * escala de fuerza)
+
+                direction.z = Number(moveForward) - Number(moveBackward);
+                direction.x = Number(moveRight) - Number(moveLeft);
+                direction.normalize(); // Asegura movimiento diagonal uniforme
+
+                // Determinar velocidad si corre o camina
+                let speedMultiplier = isSprinting ? 600.0 : 300.0;
+
+                if (moveForward || moveBackward) velocity.z -= direction.z * speedMultiplier * delta;
+                if (moveLeft || moveRight) velocity.x -= direction.x * speedMultiplier * delta;
+
+                // Aplicar movimiento a los ejes locales del personaje
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
+
+                // Aplicar gravedad e ir actualizando la altura base
+                playerY += velocity.y * delta;
+
+                // Colisión básica con el suelo (Y = playerHeight)
+                if (playerY < playerHeight) {
+                    velocity.y = 0;
+                    playerY = playerHeight;
+                    canJump = true;
+                }
+
+                // --- EFECTO CAMARA REALISTA (Head Bobbing) ---
+                let isMoving = (moveForward || moveBackward || moveLeft || moveRight) && playerY === playerHeight;
+                
+                if (isMoving) {
+                    // Si corre, el cabeceo es más rápido e intenso
+                    currentBobSpeed = isSprinting ? 14 : 10; 
+                    currentBobAmount = isSprinting ? 0.18 : 0.09;
+                    bobTimer += delta * currentBobSpeed;
+                    
+                    // Aplicar movimiento oscilatorio de "caminar" en Y y X (leves hombros)
+                    controls.getObject().position.y = playerY + Math.sin(bobTimer) * currentBobAmount;
+                    camera.rotation.z = Math.cos(bobTimer) * (currentBobAmount * 0.1); // Inclinación lateral realista
+                } else {
+                    // Volver suavemente al estado de reposo si se detiene o está en el aire
+                    bobTimer = 0;
+                    controls.getObject().position.y = THREE.MathUtils.lerp(controls.getObject().position.y, playerY, delta * 10);
+                    camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, 0, delta * 10);
+                }
+
+                prevTime = time;
+            }
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
