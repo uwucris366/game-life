@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototipo Juego 3D - Primera Persona</title>
+    <title>Prototipo Juego 3D - Cámara Estándar</title>
     <style>
         body {
             margin: 0;
@@ -59,17 +59,12 @@
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
         let canJump = false, isSprinting = false;
         
-        // Variables de física básicas
+        // Variables de física
         let prevTime = performance.now();
         const velocity = new THREE.Vector3();
         const direction = new THREE.Vector3();
-        let playerHeight = 2.0; // Altura de los ojos del personaje
+        let playerHeight = 2.0; // Altura fija de los ojos del personaje
         let playerY = playerHeight; 
-
-        // Variables para el movimiento realista de cámara (Head Bobbing)
-        let bobTimer = 0;
-        let currentBobSpeed = 0;
-        let currentBobAmount = 0;
 
         init();
         animate();
@@ -77,7 +72,7 @@
         function init() {
             // 1. Escena y Cámara
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xefd1b5); // Color del cielo
+            scene.background = new THREE.Color(0xefd1b5); 
             scene.fog = new THREE.FogExp2(0xefd1b5, 0.015);
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -93,7 +88,7 @@
             dirLight.shadow.mapSize.height = 2048;
             scene.add(dirLight);
 
-            // 3. Controles de Primera Persona (PointerLock)
+            // 3. Controles de Primera Persona Estándar
             controls = new THREE.PointerLockControls(camera, document.body);
 
             const blocker = document.getElementById('blocker');
@@ -115,7 +110,7 @@
 
             scene.add(controls.getObject());
 
-            // Posición inicial del jugador
+            // Posición inicial
             controls.getObject().position.y = playerHeight;
 
             // 4. Oyentes de Teclado
@@ -143,19 +138,17 @@
             document.addEventListener('keydown', onKeyDown);
             document.addEventListener('keyup', onKeyUp);
 
-            // 5. Entorno (Suelo y Objetos de referencia)
-            // Suelo (un tablero de ajedrez simple)
+            // 5. Entorno (Suelo y Objetos)
             const floorGeo = new THREE.PlaneGeometry(200, 200, 50, 50);
             floorGeo.rotateX(-Math.PI / 2);
             
-            // Colores alternos para el suelo para notar el movimiento
             const position = floorGeo.attributes.position;
             const colors = [];
             for (let i = 0; i < position.count; i++) {
                 if ((Math.floor(position.getX(i)/10) + Math.floor(position.getZ(i)/10)) % 2 === 0) {
-                    colors.push(0.4, 0.7, 0.4); // Verde oscuro
+                    colors.push(0.4, 0.7, 0.4); 
                 } else {
-                    colors.push(0.5, 0.8, 0.5); // Verde claro
+                    colors.push(0.5, 0.8, 0.5); 
                 }
             }
             floorGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -165,7 +158,7 @@
             floor.receiveShadow = true;
             scene.add(floor);
 
-            // Añadir algunos cubos flotantes y estructuras para dar sensación de espacio
+            // Obstáculos / Cubos estáticos
             const boxGeo = new THREE.BoxGeometry(4, 4, 4);
             for (let i = 0; i < 40; i++) {
                 const boxMat = new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff, roughness: 0.5 });
@@ -185,7 +178,6 @@
             renderer.shadowMap.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            // Ajuste de pantalla
             window.addEventListener('resize', onWindowResize);
         }
 
@@ -195,61 +187,49 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // 7. Bucle de Animación (Físicas y Renderizado)
+        // 7. Bucle de Animación
         function animate() {
             requestAnimationFrame(animate);
 
             if (controls.isLocked === true) {
                 const time = performance.now();
-                const delta = (time - prevTime) / 1000; // Tiempo transcurrido en segundos
+                const delta = (time - prevTime) / 1000; 
 
-                // Amortiguación/Fricción de velocidad (para frenar suavemente)
+                // Fricción (frenado suave)
                 velocity.x -= velocity.x * 10.0 * delta;
                 velocity.z -= velocity.z * 10.0 * delta;
-                velocity.y -= 9.8 * 3.5 * delta; // Gravedad (G = 9.8 * escala de fuerza)
+                velocity.y -= 9.8 * 3.5 * delta; // Gravedad
 
                 direction.z = Number(moveForward) - Number(moveBackward);
                 direction.x = Number(moveRight) - Number(moveLeft);
-                direction.normalize(); // Asegura movimiento diagonal uniforme
+                direction.normalize(); 
 
-                // Determinar velocidad si corre o camina
+                // Velocidad según Sprint
                 let speedMultiplier = isSprinting ? 600.0 : 300.0;
 
                 if (moveForward || moveBackward) velocity.z -= direction.z * speedMultiplier * delta;
                 if (moveLeft || moveRight) velocity.x -= direction.x * speedMultiplier * delta;
 
-                // Aplicar movimiento a los ejes locales del personaje
+                // Moverse en espacio local
                 controls.moveRight(-velocity.x * delta);
                 controls.moveForward(-velocity.z * delta);
 
-                // Aplicar gravedad e ir actualizando la altura base
+                // Altura del jugador
                 playerY += velocity.y * delta;
 
-                // Colisión básica con el suelo (Y = playerHeight)
+                // Suelo estricto
                 if (playerY < playerHeight) {
                     velocity.y = 0;
                     playerY = playerHeight;
                     canJump = true;
                 }
 
-                // --- EFECTO CAMARA REALISTA (Head Bobbing) ---
-                let isMoving = (moveForward || moveBackward || moveLeft || moveRight) && playerY === playerHeight;
+                // --- CÁMARA NORMAL Y ESTABLE ---
+                // Forzamos que la altura de la cámara sea exactamente la del jugador (sin senos ni cosenos)
+                controls.getObject().position.y = playerY;
                 
-                if (isMoving) {
-                    // Si corre, el cabeceo es más rápido e intenso
-                    currentBobSpeed = isSprinting ? 14 : 10; 
-                    currentBobAmount = isSprinting ? 0.18 : 0.09;
-                    bobTimer += delta * currentBobSpeed;
-                    
-                    // Aplicar movimiento oscilatorio de "caminar" en Y y X (leves hombros)
-                    controls.getObject().position.y = playerY + Math.sin(bobTimer) * currentBobAmount;
-                    camera.rotation.z = Math.cos(bobTimer) * (currentBobAmount * 0.1); // Inclinación lateral realista
-                } else {
-                    // Volver suavemente al estado de reposo si se detiene o está en el aire
-                    bobTimer = 0;
-                    controls.getObject().position.y = THREE.MathUtils.lerp(controls.getObject().position.y, playerY, delta * 10);
-                    camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, 0, delta * 10);
-                }
+                // Forzamos que la rotación Z sea siempre 0 (evita que la pantalla se tuerza de lado)
+                camera.rotation.z = 0;
 
                 prevTime = time;
             }
