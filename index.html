@@ -3,181 +3,177 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototipo Juego 3D - Cámara Estándar</title>
+    <title>Juego 3D Base - Primera Persona</title>
     <style>
-        body {
+        html, body {
             margin: 0;
+            padding: 0;
             overflow: hidden;
-            font-family: sans-serif;
+            width: 100%;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        #blocker {
+        /* Pantalla de inicio / Bloqueo de ratón */
+        #bloqueo {
             position: absolute;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: #ffffff;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
-            color: white;
             text-align: center;
+            z-index: 999;
             cursor: pointer;
-            z-index: 10;
         }
-        #instructions {
+        #instrucciones {
             font-size: 24px;
         }
-        #crosshair {
+        /* Punto de mira (Crosshair) opcional */
+        #mira {
             position: absolute;
             top: 50%;
             left: 50%;
             width: 10px;
             height: 10px;
+            background-color: rgba(255, 255, 255, 0.5);
             border-radius: 50%;
-            background: rgba(255, 255, 255, 0.7);
             transform: translate(-50%, -50%);
             pointer-events: none;
-            z-index: 5;
+            z-index: 10;
         }
     </style>
 </head>
 <body>
 
-    <div id="blocker">
-        <div id="instructions">
-            <p style="font-size: 36px;">Haz clic para Jugar</p>
-            <p>Moverse: WASD o Flechas<br>Correr: SHIFT<br>Saltar: ESPACIO<br>Mirar: Ratón</p>
+    <div id="bloqueo">
+        <div id="instrucciones">
+            <h1 style="margin-bottom: 10px;">JUEGO 3D BASE</h1>
+            <p><strong>CLIC PARA JUGAR</strong></p>
+            <p style="font-size: 16px; color: #ccc;">Moverse: W, A, S, D<br>Mirar: Ratón<br>Salir: ESC</p>
         </div>
     </div>
-    
-    <div id="crosshair"></div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+    <div id="mira"></div>
 
-    <script>
-        let scene, camera, renderer, controls;
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-        let canJump = false, isSprinting = false;
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // Variables principales
+        let camera, scene, renderer, controls;
+        let moverAdelante = false, moverAtras = false, moverIzquierda = false, moverDerecha = false;
         
-        // Variables de física
-        let prevTime = performance.now();
-        const velocity = new THREE.Vector3();
-        const direction = new THREE.Vector3();
-        let playerHeight = 2.0; // Altura fija de los ojos del personaje
-        let playerY = playerHeight; 
+        // Vectores para físicas simples de movimiento
+        const velocidad = new THREE.Vector3();
+        const direccion = new THREE.Vector3();
+        
+        let reloj = new THREE.Clock();
 
         init();
         animate();
 
         function init() {
-            // 1. Escena y Cámara
+            // 1. Escena y Niebla (para dar profundidad)
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xefd1b5); 
-            scene.fog = new THREE.FogExp2(0xefd1b5, 0.015);
+            scene.background = new THREE.Color(0xefd1b5);
+            scene.fog = new THREE.FogExp2(0xefd1b5, 0.025);
 
+            // 2. Cámara (Campo de visión, Proporción, Cercano, Lejano)
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            
-            // 2. Iluminación
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-            scene.add(ambientLight);
+            camera.position.y = 1.6; // Altura promedio de los ojos del jugador
 
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            dirLight.position.set(20, 40, 20);
-            dirLight.castShadow = true;
-            dirLight.shadow.mapSize.width = 2048;
-            dirLight.shadow.mapSize.height = 2048;
-            scene.add(dirLight);
+            // 3. Luces
+            const luzAmbiental = new THREE.AmbientLight(0xffffff, 1.5);
+            scene.add(luzAmbiental);
 
-            // 3. Controles de Primera Persona Estándar
-            controls = new THREE.PointerLockControls(camera, document.body);
+            const luzDirecional = new THREE.DirectionalLight(0xffffff, 1.0);
+            luzDirecional.position.set(20, 40, 20);
+            scene.add(luzDirecional);
 
-            const blocker = document.getElementById('blocker');
-            const instructions = document.getElementById('instructions');
+            // 4. Controles de Primera Persona
+            controls = new PointerLockControls(camera, document.body);
 
-            blocker.addEventListener('click', () => {
+            const bloqueo = document.getElementById('bloqueo');
+            bloqueo.addEventListener('click', () => {
                 controls.lock();
             });
 
             controls.addEventListener('lock', () => {
-                instructions.style.display = 'none';
-                blocker.style.display = 'none';
+                bloqueo.style.display = 'none';
             });
 
             controls.addEventListener('unlock', () => {
-                blocker.style.display = 'flex';
-                instructions.style.display = '';
+                bloqueo.style.display = 'flex';
             });
 
             scene.add(controls.getObject());
 
-            // Posición inicial
-            controls.getObject().position.y = playerHeight;
-
-            // 4. Oyentes de Teclado
+            // 5. Escuchar Teclado
             const onKeyDown = (event) => {
                 switch (event.code) {
-                    case 'KeyW': case 'ArrowUp': moveForward = true; break;
-                    case 'KeyS': case 'ArrowDown': moveBackward = true; break;
-                    case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
-                    case 'KeyD': case 'ArrowRight': moveRight = true; break;
-                    case 'Space': if (canJump === true) velocity.y += 12; canJump = false; break;
-                    case 'ShiftLeft': case 'ShiftRight': isSprinting = true; break;
+                    case 'KeyW': moverAdelante = true; break;
+                    case 'KeyA': moverIzquierda = true; break;
+                    case 'KeyS': moverAtras = true; break;
+                    case 'KeyD': moverDerecha = true; break;
                 }
             };
 
             const onKeyUp = (event) => {
                 switch (event.code) {
-                    case 'KeyW': case 'ArrowUp': moveForward = false; break;
-                    case 'KeyS': case 'ArrowDown': moveBackward = false; break;
-                    case 'KeyA': case 'ArrowLeft': moveLeft = false; break;
-                    case 'KeyD': case 'ArrowRight': moveRight = false; break;
-                    case 'ShiftLeft': case 'ShiftRight': isSprinting = false; break;
+                    case 'KeyW': moverAdelante = false; break;
+                    case 'KeyA': moverIzquierda = false; break;
+                    case 'KeyS': moverAtras = false; break;
+                    case 'KeyD': moverDerecha = false; break;
                 }
             };
 
             document.addEventListener('keydown', onKeyDown);
             document.addEventListener('keyup', onKeyUp);
 
-            // 5. Entorno (Suelo y Objetos)
-            const floorGeo = new THREE.PlaneGeometry(200, 200, 50, 50);
-            floorGeo.rotateX(-Math.PI / 2);
-            
-            const position = floorGeo.attributes.position;
-            const colors = [];
-            for (let i = 0; i < position.count; i++) {
-                if ((Math.floor(position.getX(i)/10) + Math.floor(position.getZ(i)/10)) % 2 === 0) {
-                    colors.push(0.4, 0.7, 0.4); 
-                } else {
-                    colors.push(0.5, 0.8, 0.5); 
-                }
-            }
-            floorGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-            
-            const floorMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 });
-            const floor = new THREE.Mesh(floorGeo, floorMat);
-            floor.receiveShadow = true;
-            scene.add(floor);
+            // 6. El Entorno (Suelo y Obstáculos)
+            // Suelo con textura de rejilla básica
+            const sueloGeo = new THREE.PlaneGeometry(200, 200);
+            const sueloMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
+            const suelo = new THREE.Mesh(sueloGeo, sueloMat);
+            suelo.rotation.x = -Math.PI / 2; // Acostar el plano
+            scene.add(suelo);
 
-            // Obstáculos / Cubos estáticos
-            const boxGeo = new THREE.BoxGeometry(4, 4, 4);
-            for (let i = 0; i < 40; i++) {
-                const boxMat = new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff, roughness: 0.5 });
-                const box = new THREE.Mesh(boxGeo, boxMat);
-                box.position.x = Math.floor(Math.random() * 20 - 10) * 8;
-                box.position.y = Math.floor(Math.random() * 4) * 4 + 2;
-                box.position.z = Math.floor(Math.random() * 20 - 10) * 8;
-                box.castShadow = true;
-                box.receiveShadow = true;
-                scene.add(box);
+            // Crear algunos cubos aleatorios para tener puntos de referencia
+            const cuboGeo = new THREE.BoxGeometry(2, 4, 2);
+            for (let i = 0; i < 50; i++) {
+                const cuboMat = new THREE.MeshStandardMaterial({ 
+                    color: Math.random() * 0xffffff,
+                    roughness: 0.5 
+                });
+                const cubo = new THREE.Mesh(cuboGeo, cuboMat);
+                
+                // Posiciones aleatorias en el mapa
+                cubo.position.x = (Math.random() - 0.5) * 100;
+                cubo.position.z = (Math.random() - 0.5) * 100;
+                cubo.position.y = 2; // Mitad de la altura para que pise el suelo
+                
+                scene.add(cubo);
             }
 
-            // 6. Renderizador
+            // 7. Renderizador
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
             document.body.appendChild(renderer.domElement);
 
+            // Ajustar pantalla si cambia el tamaño de la ventana
             window.addEventListener('resize', onWindowResize);
         }
 
@@ -187,51 +183,29 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // 7. Bucle de Animación
+        // 8. Bucle de Animación (Game Loop)
         function animate() {
             requestAnimationFrame(animate);
 
             if (controls.isLocked === true) {
-                const time = performance.now();
-                const delta = (time - prevTime) / 1000; 
+                const delta = reloj.getDelta(); // Tiempo transcurrido entre frames
 
-                // Fricción (frenado suave)
-                velocity.x -= velocity.x * 10.0 * delta;
-                velocity.z -= velocity.z * 10.0 * delta;
-                velocity.y -= 9.8 * 3.5 * delta; // Gravedad
+                // Amortiguación/Fricción para que el movimiento sea fluido
+                velocidad.x -= velocidad.x * 10.0 * delta;
+                velocidad.z -= velocidad.z * 10.0 * delta;
 
-                direction.z = Number(moveForward) - Number(moveBackward);
-                direction.x = Number(moveRight) - Number(moveLeft);
-                direction.normalize(); 
+                // Definir dirección según las teclas pulsadas
+                direccion.z = Number(moverAdelante) - Number(moverAtras);
+                direccion.x = Number(moverDerecha) - Number(moverIzquierda);
+                direccion.normalize(); // Evita que se mueva más rápido en diagonal
 
-                // Velocidad según Sprint
-                let speedMultiplier = isSprinting ? 600.0 : 300.0;
+                // Velocidad de movimiento (ajusta el 400.0 para ir más rápido o lento)
+                if (moverAdelante || moverAtras) velocidad.z -= direccion.z * 400.0 * delta;
+                if (moverIzquierda || moverDerecha) velocidad.x -= direccion.x * 400.0 * delta;
 
-                if (moveForward || moveBackward) velocity.z -= direction.z * speedMultiplier * delta;
-                if (moveLeft || moveRight) velocity.x -= direction.x * speedMultiplier * delta;
-
-                // Moverse en espacio local
-                controls.moveRight(-velocity.x * delta);
-                controls.moveForward(-velocity.z * delta);
-
-                // Altura del jugador
-                playerY += velocity.y * delta;
-
-                // Suelo estricto
-                if (playerY < playerHeight) {
-                    velocity.y = 0;
-                    playerY = playerHeight;
-                    canJump = true;
-                }
-
-                // --- CÁMARA NORMAL Y ESTABLE ---
-                // Forzamos que la altura de la cámara sea exactamente la del jugador (sin senos ni cosenos)
-                controls.getObject().position.y = playerY;
-                
-                // Forzamos que la rotación Z sea siempre 0 (evita que la pantalla se tuerza de lado)
-                camera.rotation.z = 0;
-
-                prevTime = time;
+                // Aplicar movimiento relativo a la cámara
+                controls.moveRight(-velocidad.x * delta);
+                controls.moveForward(-velocidad.z * delta);
             }
 
             renderer.render(scene, camera);
